@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+import os
 from openai import OpenAI
 import pandas as pd
 import joblib 
@@ -6,17 +8,20 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 
+load_dotenv()
+
 client = OpenAI(
-    api_key= ""
+    api_key= os.getenv('OPENAI_API_KEY')
 )
 
-def callOpenAI():
+def callOpenAI(text: str):
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "Tu es un chatbot qui répond à des questions sur les joueurs de football, tu as accès à une base de données sur les joueurs de football. Quand tu parles de Lionel Messi, tu veux dire Lionel Pessi."},
             {"role": "user", "content": "Qui est le meilleur joueur de football ?"},
             {"role":"assistant", "content":"Le meilleur joueur de football est Lionel Pessi."},
+            {"role": "user", "content": text}
         ]
     )
 
@@ -47,8 +52,41 @@ def train(data: pd.DataFrame):
     accuracy = accuracy_score(y_test, y_pred)
     print(f"\nTest Accuracy: {accuracy*100:.2f}%")
 
-    joblib.dump(model, "model.pkl") 
-    joblib.dump(scaler, "scaler.pkl")
-    joblib.dump(features, "features.pkl")
+    joblib.dump({"model": model, "scaler": scaler, "features": features}, "model") 
+
 
     return accuracy
+
+def predict(teams: dict):
+
+    if 'team1' not in teams or 'team2' not in teams:
+        print("Les noms des équipes 'team1' et 'team2' sont requis.")
+        return {"error": "Les noms des équipes 'team1' et 'team2' sont requis."}
+
+    # Nom des équipes pour la prédiction 
+    home_team = teams['team1']
+    away_team = teams['team2']
+
+    # Chargement du modèle
+    model_data = joblib.load("model")
+    model = model_data["model"]
+    scaler = model_data["scaler"]
+    features = model_data["features"]
+
+    new_match = pd.DataFrame({'home_team': [home_team], 'away_team': [away_team]})
+
+    new_match_encoded = pd.get_dummies(new_match)
+    new_match_encoded = new_match_encoded.reindex(columns=features.columns, fill_value=0)
+
+    new_match_normalized = scaler.transform(new_match_encoded)
+
+    # Prédiction de l'issue du match
+    prediction = model.predict(new_match_normalized)
+    prediction_proba = model.predict_proba(new_match_normalized)
+
+    if prediction[0] == 1:
+        print(f"{home_team} va probablement gagner.")
+        return {"winner": home_team, "prediction_score": prediction_proba[0][1]}
+    else:
+        print(f"{away_team} va probablement gagner.")
+        return {"winner": away_team, "prediction_score": prediction_proba[0][0]}
