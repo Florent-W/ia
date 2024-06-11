@@ -1,14 +1,28 @@
-from fastapi import FastAPI
-from tensorflow.keras.models import load_model
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from function import train
+import pandas as pd
+import io
 
-from pydantic import BaseModel
+app = FastAPI()
+origins = ["*"]
 
-app = FastAPI(
-    title="L'API The Predictor",
-    description="L'API va permettre de faire des prédictions sur les rencontres de matchs internationaux de football.",
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-@app.post("/predict", tags=["Numbers"])
-def predict(data:Data):
-    print(True)
-    model = load_model('model.h5')
+@app.post("/training")
+async def create_training(file: UploadFile = File(...)):
+    print("test")
+    # Lire le contenu du fichier CSV
+    content = await file.read()
+    # Charger le CSV dans un DataFrame pandas
+    df = pd.read_csv(io.StringIO(content.decode('utf-8')))
+    # Appeler la fonction train avec le DataFrame
+    response = train(df)
+    # Retourner la réponse de la fonction train
+    return {"response": response}
